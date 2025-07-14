@@ -2,28 +2,30 @@ from keep_alive import keep_alive
 keep_alive()
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
+from discord import app_commands
 import sqlite3
 import os
 import json
 from datetime import datetime
 
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
 
 conn = sqlite3.connect('stats.db')
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS user_stats (
+c.execute("""CREATE TABLE IF NOT EXISTS user_stats (
     user_id TEXT PRIMARY KEY,
     messages INTEGER DEFAULT 0,
     voice_seconds INTEGER DEFAULT 0
-)''')
-c.execute('''CREATE TABLE IF NOT EXISTS settings (
+)""")
+c.execute("""CREATE TABLE IF NOT EXISTS settings (
     guild_id TEXT,
     key TEXT,
     value TEXT,
     PRIMARY KEY (guild_id, key)
-)''')
+)""")
 conn.commit()
 
 LEADERBOARD_FILE = "leaderboard_ids.json"
@@ -36,19 +38,17 @@ def save_leaderboard_data():
 async def load_leaderboard_data():
     global leaderboard_data
     if os.path.exists(LEADERBOARD_FILE):
-        try:
-            with open(LEADERBOARD_FILE, "r") as f:
-                leaderboard_data = json.load(f)
-            print("✅ Loaded leaderboard message data.")
-        except Exception as e:
-            print(f"Failed to load leaderboard data: {e}")
+        with open(LEADERBOARD_FILE, "r") as f:
+            leaderboard_data = json.load(f)
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user}')
     await bot.change_presence(activity=discord.Game(name="ur daily distraction"))
     await load_leaderboard_data()
+    for guild in bot.guilds:
+        await tree.sync(guild=guild)
     update_leaderboards.start()
+    print(f"Logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -56,13 +56,11 @@ async def on_message(message):
         return
     user_id = str(message.author.id)
     c.execute("SELECT * FROM user_stats WHERE user_id = ?", (user_id,))
-    row = c.fetchone()
-    if row:
+    if c.fetchone():
         c.execute("UPDATE user_stats SET messages = messages + 1 WHERE user_id = ?", (user_id,))
     else:
         c.execute("INSERT INTO user_stats (user_id, messages, voice_seconds) VALUES (?, 1, 0)", (user_id,))
     conn.commit()
-    await bot.process_commands(message)
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -84,69 +82,61 @@ async def on_voice_state_update(member, before, after):
             c.execute("INSERT INTO user_stats (user_id, messages, voice_seconds) VALUES (?, 0, ?)", (uid, int(seconds)))
         conn.commit()
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setmessages(ctx, channel: discord.TextChannel = None):
-    if channel is None:
-        return await ctx.send("❌ Please mention a channel. Usage: `!setmessages #channel`")
-    guild_id = str(ctx.guild.id)
-    c.execute("INSERT OR REPLACE INTO settings (guild_id, key, value) VALUES (?, 'message_channel', ?)", (guild_id, channel.id))
+@tree.command(name="set", description="Set chat or vc leaderboard channel")
+@app_commands.describe(type="Choose 'chat' or 'vc'", channel="Channel to post leaderboard in")
+@app_commands.choices(type=[
+    app_commands.Choice(name="chat", value="chat"),
+    app_commands.Choice(name="vc", value="vc")
+])
+async def set_channel(interaction: discord.Interaction, type: app_commands.Choice[str], channel: discord.TextChannel):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+    c.execute("INSERT OR REPLACE INTO settings (guild_id, key, value) VALUES (?, ?, ?)", (
+        str(interaction.guild.id),
+        "message_channel" if type.value == "chat" else "voice_channel",
+        str(channel.id)
+    ))
     conn.commit()
-    await ctx.send(f"✅ Message leaderboard will be posted in {channel.mention}")
+    await interaction.response.send_message(f"✅ {type.name.title()} leaderboard set to {channel.mention}", ephemeral=True)
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setvoice(ctx, channel: discord.TextChannel = None):
-    if channel is None:
-        return await ctx.send("❌ Please mention a channel. Usage: `!setvoice #channel`")
-    guild_id = str(ctx.guild.id)
-    c.execute("INSERT OR REPLACE INTO settings (guild_id, key, value) VALUES (?, 'voice_channel', ?)", (guild_id, channel.id))
-    conn.commit()
-    await ctx.send(f"✅ Voice leaderboard will be posted in {channel.mention}")
+@tree.command(name="show", description="Post both leaderboards")
+async def show_lbs(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def postlbs(ctx):
-    guild_id = str(ctx.guild.id)
-
+    guild_id = str(interaction.guild.id)
     c.execute("SELECT value FROM settings WHERE guild_id = ? AND key = 'message_channel'", (guild_id,))
     msg = c.fetchone()
     c.execute("SELECT value FROM settings WHERE guild_id = ? AND key = 'voice_channel'", (guild_id,))
     vc = c.fetchone()
 
     if not msg or not vc:
-        return await ctx.send("❌ Please run `!setmessages` and `!setvoice` first in this server.")
+        return await interaction.response.send_message("❌ Please set both channels with `/set chat` and `/set vc`.", ephemeral=True)
 
-    try:
-        message_channel_id = int(msg[0])
-        voice_channel_id = int(vc[0])
-        msg_channel = bot.get_channel(message_channel_id)
-        vc_channel = bot.get_channel(voice_channel_id)
-        if msg_channel is None or vc_channel is None:
-            return await ctx.send("❌ One or both leaderboard channels not found or inaccessible.")
-    except Exception:
-        return await ctx.send("❌ Invalid channel IDs. Please reset them.")
+    msg_channel = bot.get_channel(int(msg[0]))
+    vc_channel = bot.get_channel(int(vc[0]))
+    if not msg_channel or not vc_channel:
+        return await interaction.response.send_message("❌ One or both channels are invalid.", ephemeral=True)
 
-    top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
-    top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
-
-    guild = ctx.guild
+    top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC").fetchall()
+    top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC").fetchall()
 
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
-        description=await format_leaderboard(top_msg, False, guild),
+        description=await format_leaderboard(top_msg, False, interaction.guild),
         color=discord.Color.from_rgb(255, 182, 193)
     )
     vc_embed = discord.Embed(
         title="Voice Leaderboard",
-        description=await format_leaderboard(top_vc, True, guild),
+        description=await format_leaderboard(top_vc, True, interaction.guild),
         color=discord.Color.from_rgb(255, 182, 193)
     )
 
-    msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    msg_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
-    vc_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
+    now = datetime.now().strftime("%b %d • %I:%M %p")
+    msg_embed.set_author(name=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    vc_embed.set_author(name=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    msg_embed.set_footer(text=f"Updated • {now}")
+    vc_embed.set_footer(text=f"Updated • {now}")
 
     msg_msg = await msg_channel.send(embed=msg_embed)
     vc_msg = await vc_channel.send(embed=vc_embed)
@@ -159,75 +149,45 @@ async def postlbs(ctx):
     }
     save_leaderboard_data()
 
-    await ctx.send("✅ Leaderboards posted and will auto-update every 10 minutes.")
+    await interaction.response.send_message("✅ Leaderboards posted.", ephemeral=True)
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def update(ctx):
-    guild_id = str(ctx.guild.id)
+@tree.command(name="update", description="Manually update leaderboards")
+async def update_lb(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+    guild_id = str(interaction.guild.id)
     if guild_id not in leaderboard_data:
-        return await ctx.send("❌ No leaderboard messages found for this server. Use `!postlbs` first.")
+        return await interaction.response.send_message("❌ Use `/show` first to post the leaderboard.", ephemeral=True)
     await update_now_for_guild(guild_id)
-    await ctx.send("✅ Leaderboards updated manually.")
+    await interaction.response.send_message("✅ Leaderboards updated.", ephemeral=True)
 
 @tasks.loop(minutes=10)
 async def update_leaderboards():
-    for guild_id in list(leaderboard_data.keys()):
+    for gid in list(leaderboard_data.keys()):
         try:
-            await update_now_for_guild(guild_id)
+            await update_now_for_guild(gid)
         except Exception as e:
-            print(f"Failed to update leaderboard for guild {guild_id}: {e}")
+            print(f"Failed to update guild {gid}: {e}")
 
 async def update_now_for_guild(guild_id):
     if guild_id not in leaderboard_data:
         return
     data = leaderboard_data[guild_id]
-
     guild = bot.get_guild(int(guild_id))
-    if guild is None:
-        print(f"Guild {guild_id} not found.")
+    if not guild:
         return
-
     msg_channel = bot.get_channel(data["msg_channel"])
     vc_channel = bot.get_channel(data["vc_channel"])
-
-    if msg_channel is None or vc_channel is None:
-        print(f"Channels for guild {guild_id} not found.")
+    if not msg_channel or not vc_channel:
         return
-
     try:
         msg_msg = await msg_channel.fetch_message(data["msg_id"])
         vc_msg = await vc_channel.fetch_message(data["vc_id"])
     except discord.NotFound:
-        top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
-        top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
-
-        msg_embed = discord.Embed(
-            title="Messages Leaderboard",
-            description=await format_leaderboard(top_msg, False, guild),
-            color=discord.Color.from_rgb(255, 182, 193)
-        )
-        vc_embed = discord.Embed(
-            title="Voice Leaderboard",
-            description=await format_leaderboard(top_vc, True, guild),
-            color=discord.Color.from_rgb(255, 182, 193)
-        )
-
-        msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        msg_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
-        vc_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
-
-        msg_msg = await msg_channel.send(embed=msg_embed)
-        vc_msg = await vc_channel.send(embed=vc_embed)
-
-        leaderboard_data[guild_id]["msg_id"] = msg_msg.id
-        leaderboard_data[guild_id]["vc_id"] = vc_msg.id
-        save_leaderboard_data()
         return
 
-    top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
-    top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
+    top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC").fetchall()
+    top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC").fetchall()
 
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
@@ -240,10 +200,11 @@ async def update_now_for_guild(guild_id):
         color=discord.Color.from_rgb(255, 182, 193)
     )
 
+    now = datetime.now().strftime("%b %d • %I:%M %p")
     msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
     vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    msg_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
-    vc_embed.set_footer(text=f"Updated • {datetime.now().strftime('%b %d, %I:%M %p')}")
+    msg_embed.set_footer(text=f"Updated • {now}")
+    vc_embed.set_footer(text=f"Updated • {now}")
 
     await msg_msg.edit(embed=msg_embed)
     await vc_msg.edit(embed=vc_embed)
@@ -259,18 +220,13 @@ async def format_leaderboard(users, is_voice, guild):
         "<:lb_7:1394342533567483925>",
         "<:lb_8:1394342550587965542>",
         "<:lb_9:1394342569877700658>",
-        "<:lb_10:1394342586025513112>",
+        "<:lb_10:1394342586025513112>"
     ]
     lines = []
     count = 0
     for i, u in enumerate(users):
         user_id = int(u[0])
-        member = guild.get_member(user_id)
-        if not member:
-            try:
-                member = await guild.fetch_member(user_id)
-            except:
-                continue
+        member = guild.get_member(user_id) or await guild.fetch_member(user_id)
         if member.bot:
             continue
         value = format_voice_time(u[2]) if is_voice else f"{u[1]} messages"
