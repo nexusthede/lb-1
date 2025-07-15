@@ -5,9 +5,7 @@ import sqlite3
 import json
 from datetime import datetime
 
-# Intents
 intents = discord.Intents.all()
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 conn = sqlite3.connect('stats.db')
@@ -146,8 +144,11 @@ async def show_cmd(interaction: discord.Interaction):
     url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
     msg_embed.set_image(url=url)
     vc_embed.set_image(url=url)
-    msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
-    vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+
+    icon_url = guild.icon.url if guild.icon else None
+    msg_embed.set_author(name=guild.name, icon_url=icon_url)
+    vc_embed.set_author(name=guild.name, icon_url=icon_url)
+
     msg_embed.set_footer(text="Updates every 10 minutes")
     vc_embed.set_footer(text="Updates every 10 minutes")
 
@@ -219,8 +220,11 @@ async def update_now_for_guild(guild_id):
         url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
         msg_embed.set_image(url=url)
         vc_embed.set_image(url=url)
-        msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
-        vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+
+        icon_url = guild.icon.url if guild.icon else None
+        msg_embed.set_author(name=guild.name, icon_url=icon_url)
+        vc_embed.set_author(name=guild.name, icon_url=icon_url)
+
         msg_embed.set_footer(text="Updates every 10 minutes")
         vc_embed.set_footer(text="Updates every 10 minutes")
 
@@ -248,8 +252,11 @@ async def update_now_for_guild(guild_id):
     url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
     msg_embed.set_image(url=url)
     vc_embed.set_image(url=url)
-    msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
-    vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+
+    icon_url = guild.icon.url if guild.icon else None
+    msg_embed.set_author(name=guild.name, icon_url=icon_url)
+    vc_embed.set_author(name=guild.name, icon_url=icon_url)
+
     msg_embed.set_footer(text="Updates every 10 minutes")
     vc_embed.set_footer(text="Updates every 10 minutes")
 
@@ -279,23 +286,23 @@ async def format_leaderboard(users, is_voice, guild):
         if member.bot:
             continue
 
-        value = format_voice_time(u[2]) if is_voice else f"{u[1]} message(s)"
+        if is_voice:
+            value = format_voice_time(u[2])
+        else:
+            value = f"**{u[1]}** message(s)"
+
         rank = medals[i] if i < len(medals) else f"#{i + 1}"
-        lines.append(f"{rank} {member.mention} - **{value}**")
+        lines.append(f"{rank} {member.mention} - {value}")
 
     return "\n".join(lines) if lines else "No data yet!"
 
 def format_voice_time(seconds):
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    parts = []
-    if h > 0:
-        parts.append(f"{h} hour(s)")
-    if m > 0:
-        parts.append(f"{m} min(s)")
-    if h == 0 and m == 0:
-        parts.append(f"{s} sec(s)")
-    return " ".join(parts)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    # Show hours if >= 1, else minutes only
+    if hours > 0:
+        return f"**{int(hours)}** hour(s) - **{int(minutes)}** minute(s)"
+    else:
+        return f"**{int(minutes)}** minute(s)"
 
 bot.run(os.getenv("TOKEN"))
