@@ -1,3 +1,30 @@
+async def format_leaderboard(users, is_voice, guild):
+    medals = [
+        '<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>', '<:lb_3:1394342423232123091>',
+        '<:lb_4:1394342457801703425>', '<:lb_5:139434250489535
+
+Here is your **fully updated `main.py`** with everything fixed and polished:
+
+---
+
+### ✅ Final Updates:
+
+- ✅ Embed color **removed**
+- ✅ Leaderboard format:  
+  ` <:emoji> @Username - **157** message(s)`  
+  ` <:emoji> @Username - **1** hour(s) **30** min(s)`
+- ✅ Auto-updating server icon (author + thumbnail)
+- ✅ Banner image
+- ✅ Timestamp enabled (no "UTC")
+- ✅ Slash commands: `/set`, `/show`, `/update`
+- ✅ Flask keep-alive for Render
+- ✅ Leaderboards no longer break or disappear
+
+---
+
+### 📄 Copy and paste into `main.py`:
+
+```python
 import os
 import discord
 from discord.ext import commands, tasks
@@ -38,7 +65,7 @@ async def load_leaderboard_data():
         with open(LEADERBOARD_FILE, "r") as f:
             leaderboard_data = json.load(f)
 
-# Flask server for uptime
+# Flask keep-alive
 app = Flask(__name__)
 @app.route("/")
 def home(): return "Bot is online!"
@@ -51,10 +78,8 @@ async def on_ready():
     await bot.change_presence(activity=discord.Game(name="Your daily distraction"))
     await load_leaderboard_data()
     update_leaderboards.start()
-    try:
-        await bot.tree.sync()
-    except Exception as e:
-        print("Command sync failed:", e)
+    try: await bot.tree.sync()
+    except Exception as e: print("Command sync failed:", e)
 
 @bot.event
 async def on_message(message):
@@ -116,12 +141,14 @@ async def show_cmd(inter):
     top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
     top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
 
-    msg_embed = discord.Embed(title="Messages Leaderboard",
-                              description=await format_leaderboard(top_msg, False, guild),
-                              color=discord.Color.default())
-    vc_embed = discord.Embed(title="Voice Leaderboard",
-                             description=await format_leaderboard(top_vc, True, guild),
-                             color=discord.Color.default())
+    msg_embed = discord.Embed(
+        title="Messages Leaderboard",
+        description=await format_leaderboard(top_msg, False, guild)
+    )
+    vc_embed = discord.Embed(
+        title="Voice Leaderboard",
+        description=await format_leaderboard(top_vc, True, guild)
+    )
 
     for embed in [msg_embed, vc_embed]:
         embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
@@ -170,12 +197,14 @@ async def update_now_for_guild(gid):
     top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
     banner = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif"
 
-    msg_embed = discord.Embed(title="Messages Leaderboard",
-                              description=await format_leaderboard(top_msg, False, guild),
-                              color=discord.Color.default())
-    vc_embed = discord.Embed(title="Voice Leaderboard",
-                             description=await format_leaderboard(top_vc, True, guild),
-                             color=discord.Color.default())
+    msg_embed = discord.Embed(
+        title="Messages Leaderboard",
+        description=await format_leaderboard(top_msg, False, guild)
+    )
+    vc_embed = discord.Embed(
+        title="Voice Leaderboard",
+        description=await format_leaderboard(top_vc, True, guild)
+    )
 
     for embed in [msg_embed, vc_embed]:
         embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
@@ -209,7 +238,7 @@ async def format_leaderboard(users, is_voice, guild):
         member = guild.get_member(uid) or await safe_fetch(guild, uid)
         if not member or member.bot: continue
         value = format_voice(u[2]) if is_voice else f"**{u[1]}** message(s)"
-        lines.append(f"{medals[i]} {member.mention} {value}")
+        lines.append(f"{medals[i]} {member.mention} - {value}")
     return "\n".join(lines) if lines else "No data yet!"
 
 def format_voice(sec):
