@@ -1,30 +1,3 @@
-async def format_leaderboard(users, is_voice, guild):
-    medals = [
-        '<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>', '<:lb_3:1394342423232123091>',
-        '<:lb_4:1394342457801703425>', '<:lb_5:139434250489535
-
-Here is your **fully updated `main.py`** with everything fixed and polished:
-
----
-
-### ✅ Final Updates:
-
-- ✅ Embed color **removed**
-- ✅ Leaderboard format:  
-  ` <:emoji> @Username - **157** message(s)`  
-  ` <:emoji> @Username - **1** hour(s) **30** min(s)`
-- ✅ Auto-updating server icon (author + thumbnail)
-- ✅ Banner image
-- ✅ Timestamp enabled (no "UTC")
-- ✅ Slash commands: `/set`, `/show`, `/update`
-- ✅ Flask keep-alive for Render
-- ✅ Leaderboards no longer break or disappear
-
----
-
-### 📄 Copy and paste into `main.py`:
-
-```python
 import os
 import discord
 from discord.ext import commands, tasks
@@ -65,7 +38,7 @@ async def load_leaderboard_data():
         with open(LEADERBOARD_FILE, "r") as f:
             leaderboard_data = json.load(f)
 
-# Flask keep-alive
+# Flask to stay alive
 app = Flask(__name__)
 @app.route("/")
 def home(): return "Bot is online!"
@@ -74,12 +47,12 @@ Thread(target=run_flask).start()
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Game(name="Your daily distraction"))
     await load_leaderboard_data()
     update_leaderboards.start()
     try: await bot.tree.sync()
-    except Exception as e: print("Command sync failed:", e)
+    except: pass
 
 @bot.event
 async def on_message(message):
@@ -143,19 +116,24 @@ async def show_cmd(inter):
 
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
-        description=await format_leaderboard(top_msg, False, guild)
+        description=await format_leaderboard(top_msg, False, guild),
+        color=0x000000,
+        timestamp=datetime.now(timezone.utc)
     )
     vc_embed = discord.Embed(
         title="Voice Leaderboard",
-        description=await format_leaderboard(top_vc, True, guild)
+        description=await format_leaderboard(top_vc, True, guild),
+        color=0x000000,
+        timestamp=datetime.now(timezone.utc)
     )
-
-    for embed in [msg_embed, vc_embed]:
-        embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-        embed.set_image(url=banner)
-        embed.set_footer(text="Updates every 10 minutes")
-        embed.timestamp = datetime.now(timezone.utc)
+    msg_embed.set_image(url=banner)
+    vc_embed.set_image(url=banner)
+    msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    msg_embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    vc_embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    msg_embed.set_footer(text="Updates every 10 mins")
+    vc_embed.set_footer(text="Updates every 10 mins")
 
     msg_msg = await msg_channel.send(embed=msg_embed)
     vc_msg = await vc_channel.send(embed=vc_embed)
@@ -174,51 +152,57 @@ async def show_cmd(inter):
 async def update_cmd(inter):
     gid = str(inter.guild.id)
     if gid not in leaderboard_data:
-        await inter.response.send_message("❌ Use `/show` first.", ephemeral=True)
+        await inter.response.send_message("❌ Run `/show` first.", ephemeral=True)
         return
     await update_now_for_guild(gid)
     await inter.response.send_message("✅ Leaderboards updated.", ephemeral=True)
 
 @tasks.loop(minutes=10)
 async def update_leaderboards():
-    for gid in leaderboard_data.keys():
-        await update_now_for_guild(gid)
+    for gid in list(leaderboard_data.keys()):
+        try: await update_now_for_guild(gid)
+        except: pass
 
 async def update_now_for_guild(gid):
     if gid not in leaderboard_data: return
-    guild = bot.get_guild(int(gid))
-    if not guild: return
     data = leaderboard_data[gid]
+    guild = bot.get_guild(int(gid))
+    if guild is None: return
+
     msg_channel = bot.get_channel(data["msg_channel"])
     vc_channel = bot.get_channel(data["vc_channel"])
-    if not msg_channel or not vc_channel: return
+    banner = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif"
 
     top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
     top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
-    banner = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif"
 
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
-        description=await format_leaderboard(top_msg, False, guild)
+        description=await format_leaderboard(top_msg, False, guild),
+        color=0x000000,
+        timestamp=datetime.now(timezone.utc)
     )
     vc_embed = discord.Embed(
         title="Voice Leaderboard",
-        description=await format_leaderboard(top_vc, True, guild)
+        description=await format_leaderboard(top_vc, True, guild),
+        color=0x000000,
+        timestamp=datetime.now(timezone.utc)
     )
-
-    for embed in [msg_embed, vc_embed]:
-        embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-        embed.set_image(url=banner)
-        embed.set_footer(text="Updates every 10 minutes")
-        embed.timestamp = datetime.now(timezone.utc)
+    msg_embed.set_image(url=banner)
+    vc_embed.set_image(url=banner)
+    msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    msg_embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    vc_embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    msg_embed.set_footer(text="Updates every 10 mins")
+    vc_embed.set_footer(text="Updates every 10 mins")
 
     try:
         msg_msg = await msg_channel.fetch_message(data["msg_id"])
         vc_msg = await vc_channel.fetch_message(data["vc_id"])
         await msg_msg.edit(embed=msg_embed)
         await vc_msg.edit(embed=vc_embed)
-    except:
+    except discord.NotFound:
         msg_msg = await msg_channel.send(embed=msg_embed)
         vc_msg = await vc_channel.send(embed=vc_embed)
         leaderboard_data[gid]["msg_id"] = msg_msg.id
@@ -227,26 +211,26 @@ async def update_now_for_guild(gid):
 
 async def format_leaderboard(users, is_voice, guild):
     medals = [
-        '<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>', '<:lb_3:1394342423232123091>',
-        '<:lb_4:1394342457801703425>', '<:lb_5:1394342504895353106>', '<:lb_6:1394342517964669138>',
-        '<:lb_7:1394342533567483925>', '<:lb_8:1394342550587965542>', '<:lb_9:1394342569877700658>',
-        '<:lb_10:1394342586025513112>'
+        '<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>',
+        '<:lb_3:1394342423232123091>', '<:lb_4:1394342457801703425>',
+        '<:lb_5:1394342504895353106>', '<:lb_6:1394342517964669138>',
+        '<:lb_7:1394342533567483925>', '<:lb_8:1394342550587965542>',
+        '<:lb_9:1394342569877700658>', '<:lb_10:1394342586025513112>'
     ]
     lines = []
     for i, u in enumerate(users):
-        uid = int(u[0])
-        member = guild.get_member(uid) or await safe_fetch(guild, uid)
-        if not member or member.bot: continue
-        value = format_voice(u[2]) if is_voice else f"**{u[1]}** message(s)"
-        lines.append(f"{medals[i]} {member.mention} - {value}")
-    return "\n".join(lines) if lines else "No data yet!"
+        try:
+            member = guild.get_member(int(u[0])) or await guild.fetch_member(int(u[0]))
+            if member.bot: continue
+            val = format_voice(u[2]) if is_voice else f"**{u[1]}** message(s)"
+            lines.append(f"{medals[i]} {member.mention} - {val}")
+        except: continue
+    return "\n".join(lines) if lines else "No data yet."
 
-def format_voice(sec):
-    h, m = sec // 3600, (sec % 3600) // 60
-    return f"**{h}** hour(s) **{m}** min(s)" if h else f"**{m}** min(s)"
-
-async def safe_fetch(guild, uid):
-    try: return await guild.fetch_member(uid)
-    except: return None
+def format_voice(seconds):
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"**{h}h {m}m {s}s**"
 
 bot.run(os.getenv("TOKEN"))
