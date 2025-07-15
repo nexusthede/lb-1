@@ -4,6 +4,8 @@ from discord.ext import commands, tasks
 import sqlite3
 import json
 from datetime import datetime
+from threading import Thread
+from flask import Flask
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -40,6 +42,20 @@ async def load_leaderboard_data():
             print("✅ Loaded leaderboard message data.")
         except Exception as e:
             print(f"Failed to load leaderboard data: {e}")
+
+# Minimal Flask app for Render port binding
+app = Flask("")
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+flask_thread = Thread(target=run_flask)
+flask_thread.start()
 
 @bot.event
 async def on_ready():
@@ -242,8 +258,8 @@ def format_voice_time(seconds):
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
     if hours > 0:
-        return f"**{hours}** hour(s) - **{minutes}** minute(s)"
+        return f"**{hours}** hour(s) {minutes} min(s)"
     else:
-        return f"**{minutes}** minute(s)"
+        return f"**{minutes}** min(s)"
 
 bot.run(os.getenv("TOKEN"))
