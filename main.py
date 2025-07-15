@@ -8,7 +8,6 @@ from datetime import datetime
 # Intents
 intents = discord.Intents.all()
 
-# Use commands.Bot for compatibility
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 conn = sqlite3.connect('stats.db')
@@ -90,13 +89,11 @@ async def on_voice_state_update(member, before, after):
             c.execute("INSERT INTO user_stats (user_id, messages, voice_seconds) VALUES (?, 0, ?)", (uid, int(seconds)))
         conn.commit()
 
-# Admin check decorator
 def is_admin():
     async def predicate(interaction: discord.Interaction):
         return interaction.user.guild_permissions.administrator
     return discord.app_commands.check(predicate)
 
-# Slash command to set leaderboard channel
 @bot.tree.command(name="set")
 @discord.app_commands.describe(mode="Choose leaderboard type", channel="Channel to post leaderboard in")
 @is_admin()
@@ -111,7 +108,6 @@ async def set_cmd(interaction: discord.Interaction, mode: str, channel: discord.
     conn.commit()
     await interaction.response.send_message(f"✅ {mode.upper()} leaderboard channel set to {channel.mention}", ephemeral=True)
 
-# Slash command to post leaderboards
 @bot.tree.command(name="show")
 @is_admin()
 async def show_cmd(interaction: discord.Interaction):
@@ -168,7 +164,6 @@ async def show_cmd(interaction: discord.Interaction):
 
     await interaction.response.send_message("✅ Leaderboards posted and will auto-update every 10 minutes.", ephemeral=True)
 
-# Slash command to manually update leaderboards
 @bot.tree.command(name="update")
 @is_admin()
 async def update_cmd(interaction: discord.Interaction):
@@ -208,7 +203,6 @@ async def update_now_for_guild(guild_id):
         msg_msg = await msg_channel.fetch_message(data["msg_id"])
         vc_msg = await vc_channel.fetch_message(data["vc_id"])
     except discord.NotFound:
-        # If messages deleted, post new ones
         top_msg = c.execute("SELECT * FROM user_stats ORDER BY messages DESC LIMIT 10").fetchall()
         top_vc = c.execute("SELECT * FROM user_stats ORDER BY voice_seconds DESC LIMIT 10").fetchall()
 
@@ -285,21 +279,23 @@ async def format_leaderboard(users, is_voice, guild):
         if member.bot:
             continue
 
-        if is_voice:
-            value = format_voice_time(u[2])
-        else:
-            value = f"{u[1]} message(s)"
+        value = format_voice_time(u[2]) if is_voice else f"{u[1]} message(s)"
         rank = medals[i] if i < len(medals) else f"#{i + 1}"
-        lines.append(f"{rank}@{member.display_name} - **{value}**")
+        lines.append(f"{rank} {member.mention} - **{value}**")
 
     return "\n".join(lines) if lines else "No data yet!"
 
 def format_voice_time(seconds):
     h = seconds // 3600
     m = (seconds % 3600) // 60
+    s = seconds % 60
+    parts = []
     if h > 0:
-        return f"{h} hour(s)"
-    else:
-        return f"{m} min(s)"
+        parts.append(f"{h} hour(s)")
+    if m > 0:
+        parts.append(f"{m} min(s)")
+    if h == 0 and m == 0:
+        parts.append(f"{s} sec(s)")
+    return " ".join(parts)
 
 bot.run(os.getenv("TOKEN"))
