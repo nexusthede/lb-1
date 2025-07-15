@@ -8,7 +8,7 @@ from datetime import datetime
 # Intents
 intents = discord.Intents.all()
 
-# Use commands.Bot instead of discord.Bot for compatibility
+# Use commands.Bot for compatibility
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 conn = sqlite3.connect('stats.db')
@@ -90,13 +90,13 @@ async def on_voice_state_update(member, before, after):
             c.execute("INSERT INTO user_stats (user_id, messages, voice_seconds) VALUES (?, 0, ?)", (uid, int(seconds)))
         conn.commit()
 
-# Slash command helpers: Admin check
+# Admin check decorator
 def is_admin():
     async def predicate(interaction: discord.Interaction):
         return interaction.user.guild_permissions.administrator
     return discord.app_commands.check(predicate)
 
-# Slash commands
+# Slash command to set leaderboard channel
 @bot.tree.command(name="set")
 @discord.app_commands.describe(mode="Choose leaderboard type", channel="Channel to post leaderboard in")
 @is_admin()
@@ -111,6 +111,7 @@ async def set_cmd(interaction: discord.Interaction, mode: str, channel: discord.
     conn.commit()
     await interaction.response.send_message(f"✅ {mode.upper()} leaderboard channel set to {channel.mention}", ephemeral=True)
 
+# Slash command to post leaderboards
 @bot.tree.command(name="show")
 @is_admin()
 async def show_cmd(interaction: discord.Interaction):
@@ -139,22 +140,20 @@ async def show_cmd(interaction: discord.Interaction):
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
         description=await format_leaderboard(top_msg, False, guild),
-        color=0xFFB6C1,  # light pink
         timestamp=datetime.utcnow()
     )
     vc_embed = discord.Embed(
         title="Voice Leaderboard",
         description=await format_leaderboard(top_vc, True, guild),
-        color=0xFFB6C1,  # light pink
         timestamp=datetime.utcnow()
     )
-    url = "https://cdn.discordapp.com/attachments/1394342054552801352/1394586696418590770/27.gif"
+    url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
     msg_embed.set_image(url=url)
     vc_embed.set_image(url=url)
-    msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    msg_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
-    vc_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
+    msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+    vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+    msg_embed.set_footer(text="Updates every 10 minutes")
+    vc_embed.set_footer(text="Updates every 10 minutes")
 
     msg_msg = await msg_channel.send(embed=msg_embed)
     vc_msg = await vc_channel.send(embed=vc_embed)
@@ -169,6 +168,7 @@ async def show_cmd(interaction: discord.Interaction):
 
     await interaction.response.send_message("✅ Leaderboards posted and will auto-update every 10 minutes.", ephemeral=True)
 
+# Slash command to manually update leaderboards
 @bot.tree.command(name="update")
 @is_admin()
 async def update_cmd(interaction: discord.Interaction):
@@ -215,22 +215,20 @@ async def update_now_for_guild(guild_id):
         msg_embed = discord.Embed(
             title="Messages Leaderboard",
             description=await format_leaderboard(top_msg, False, guild),
-            color=0xFFB6C1,
             timestamp=datetime.utcnow()
         )
         vc_embed = discord.Embed(
             title="Voice Leaderboard",
             description=await format_leaderboard(top_vc, True, guild),
-            color=0xFFB6C1,
             timestamp=datetime.utcnow()
         )
-        url = "https://cdn.discordapp.com/attachments/1394342054552801352/1394586696418590770/27.gif"
+        url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
         msg_embed.set_image(url=url)
         vc_embed.set_image(url=url)
-        msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        msg_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
-        vc_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
+        msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+        vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+        msg_embed.set_footer(text="Updates every 10 minutes")
+        vc_embed.set_footer(text="Updates every 10 minutes")
 
         msg_msg = await msg_channel.send(embed=msg_embed)
         vc_msg = await vc_channel.send(embed=vc_embed)
@@ -246,31 +244,31 @@ async def update_now_for_guild(guild_id):
     msg_embed = discord.Embed(
         title="Messages Leaderboard",
         description=await format_leaderboard(top_msg, False, guild),
-        color=0xFFB6C1,
         timestamp=datetime.utcnow()
     )
     vc_embed = discord.Embed(
         title="Voice Leaderboard",
         description=await format_leaderboard(top_vc, True, guild),
-        color=0xFFB6C1,
         timestamp=datetime.utcnow()
     )
-    url = "https://cdn.discordapp.com/attachments/1394342054552801352/1394586696418590770/27.gif"
+    url = "https://cdn.discordapp.com/attachments/860528686403158046/1108384769147932682/ezgif-2-f41b6758ff.gif?ex=6877a841&is=687656c1&hm=1e3d976e082ca0d827f76fb06fc4d953c5e72cbc2e2454a4ad717573d90efd31&"
     msg_embed.set_image(url=url)
     vc_embed.set_image(url=url)
-    msg_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    vc_embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-    msg_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
-    vc_embed.set_footer(text=f"Updates every 10 mins | Today at {datetime.utcnow().strftime('%I:%M %p UTC')}")
+    msg_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+    vc_embed.set_author(name=guild.name, icon_url=str(guild.icon.url) if guild.icon else None)
+    msg_embed.set_footer(text="Updates every 10 minutes")
+    vc_embed.set_footer(text="Updates every 10 minutes")
 
     await msg_msg.edit(embed=msg_embed)
     await vc_msg.edit(embed=vc_embed)
 
 async def format_leaderboard(users, is_voice, guild):
-    medals = ['<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>', '<:lb_3:1394342423232123091>',
-              '<:lb_4:1394342457801703425>', '<:lb_5:1394342504895353106>', '<:lb_6:1394342517964669138>',
-              '<:lb_7:1394342533567483925>', '<:lb_8:1394342550587965542>', '<:lb_9:1394342569877700658>',
-              '<:lb_10:1394342586025513112>']
+    medals = [
+        '<:lb_1:1394342323944689724>', '<:lb_2:1394342387974668461>', '<:lb_3:1394342423232123091>',
+        '<:lb_4:1394342457801703425>', '<:lb_5:1394342504895353106>', '<:lb_6:1394342517964669138>',
+        '<:lb_7:1394342533567483925>', '<:lb_8:1394342550587965542>', '<:lb_9:1394342569877700658>',
+        '<:lb_10:1394342586025513112>'
+    ]
     lines = []
 
     for i, u in enumerate(users):
@@ -287,17 +285,21 @@ async def format_leaderboard(users, is_voice, guild):
         if member.bot:
             continue
 
-        value = format_voice_time(u[2]) if is_voice else f"{u[1]} msgs"
+        if is_voice:
+            value = format_voice_time(u[2])
+        else:
+            value = f"{u[1]} message(s)"
         rank = medals[i] if i < len(medals) else f"#{i + 1}"
-        # Use dash '-' as separator instead of bullet
-        lines.append(f"{rank} - {member.mention} - {value}")
+        lines.append(f"{rank}@{member.display_name} - **{value}**")
 
     return "\n".join(lines) if lines else "No data yet!"
 
 def format_voice_time(seconds):
     h = seconds // 3600
     m = (seconds % 3600) // 60
-    s = seconds % 60
-    return f"{h}h {m}m {s}s"
+    if h > 0:
+        return f"{h} hour(s)"
+    else:
+        return f"{m} min(s)"
 
 bot.run(os.getenv("TOKEN"))
