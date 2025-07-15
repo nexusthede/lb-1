@@ -136,12 +136,14 @@ async def show_cmd(interaction: discord.Interaction):
     msg_embed.set_thumbnail(url=icon_url)
     msg_embed.set_image(url=banner)
     msg_embed.set_footer(text="Updates every 10 minutes")
+    msg_embed.timestamp = datetime.utcnow()
 
     vc_embed = discord.Embed(title="Voice Leaderboard", description=await format_leaderboard(top_vc, True, guild))
     vc_embed.set_author(name=guild.name, icon_url=icon_url)
     vc_embed.set_thumbnail(url=icon_url)
     vc_embed.set_image(url=banner)
     vc_embed.set_footer(text="Updates every 10 minutes")
+    vc_embed.timestamp = datetime.utcnow()
 
     msg_msg = await msg_channel.send(embed=msg_embed)
     vc_msg = await vc_channel.send(embed=vc_embed)
@@ -193,12 +195,14 @@ async def update_now_for_guild(guild_id):
     msg_embed.set_thumbnail(url=icon_url)
     msg_embed.set_image(url=banner)
     msg_embed.set_footer(text="Updates every 10 minutes")
+    msg_embed.timestamp = datetime.utcnow()
 
     vc_embed = discord.Embed(title="Voice Leaderboard", description=await format_leaderboard(top_vc, True, guild))
     vc_embed.set_author(name=guild.name, icon_url=icon_url)
     vc_embed.set_thumbnail(url=icon_url)
     vc_embed.set_image(url=banner)
     vc_embed.set_footer(text="Updates every 10 minutes")
+    vc_embed.timestamp = datetime.utcnow()
 
     try:
         msg_msg = await msg_channel.fetch_message(data["msg_id"])
